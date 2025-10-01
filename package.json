@@ -1,12 +1,8 @@
 {
-  "name": "webdav",
+  "name": "webdav-serve",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "smoke": "node tests/smoke.js",
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["webdav", "server", "file-server"],
   "author": "",
