@@ -4,13 +4,17 @@ const fs = require('fs');
 const propfindRequest = async () => {
     try {
         const response = await axios({
-            method: 'HEAD',
-            url: 'http://localhost:8080/tests/files/test-smoke.txt',  // Güncellenen URL
-            headers: {
+            method: 'PROPPATCH',
+            url: 'http://localhost:8081/test-smoke.txt',  // Güncellenen URL
+            headers: {'cache-control': 'no-cache',
   connection: 'Keep-Alive',
+  pragma: 'no-cache',
+  'content-type': 'text/xml; charset="utf-8"',
   'user-agent': 'Microsoft-WebDAV-MiniRedir/10.0.26100',
-  host: 'localhost:8080'
-},
+  if: '(<5eba015d36111d43ff54378ad6621718>)',
+  translate: 'f',
+  'content-length': '316',
+  host: 'localhost:8080'}
         });
 
         console.log('Data:', response.data);
