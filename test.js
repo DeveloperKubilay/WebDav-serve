@@ -4,16 +4,13 @@ const fs = require('fs');
 const propfindRequest = async () => {
     try {
         const response = await axios({
-            method: 'GET',
-            url: 'http://localhost:8080/index.js',  // Güncellenen URL
+            method: 'HEAD',
+            url: 'http://localhost:8080/tests/files/test-smoke.txt',  // Güncellenen URL
             headers: {
   connection: 'Keep-Alive',
   'user-agent': 'Microsoft-WebDAV-MiniRedir/10.0.26100',
-  depth: '1',
-  translate: 'f',
-  'content-length': '0',
   host: 'localhost:8080'
-}
+},
         });
 
         console.log('Data:', response.data);
