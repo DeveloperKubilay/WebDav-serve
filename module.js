@@ -19,7 +19,7 @@ module.exports = function (server, options) {
         res.setHeader('MS-Author-Via', 'DAV');
 
         if (true) {
-            // console.log(req.method, path, req.headers,path);
+             console.log(req.method, path, req.headers,path);
         }
 
 
@@ -43,7 +43,7 @@ module.exports = function (server, options) {
         } else if (req.method === 'PROPFIND') {
             const list = req.headers.depth === "0" ? [
                 { name: "/", type: 'directory', size: 0, lastmod: new Date() }
-            ] : options.list(path)
+            ] : options.get(path)
                 .map(item => {
                     if (!item.name.startsWith('/')) {
                         item.name = '/' + item.name;
