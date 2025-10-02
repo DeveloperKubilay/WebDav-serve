@@ -17,7 +17,7 @@ jobs:
                   registry-url: https://registry.npmjs.org
                   
             - name: 📦 Package setup
-              run: rm -rf tests test.js .gitignore
+              run: rm -rf tests test.js .gitignore .github
               working-directory: .
 
             - name: 🚀 publish
