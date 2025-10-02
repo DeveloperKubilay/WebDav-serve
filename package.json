@@ -6,9 +6,27 @@
   "keywords": [
     "webdav",
     "server",
-    "file-server"
+    "file-server",
+    "http-server",
+    "file-management",
+    "file-sharing",
+    "network-storage",
+    "remote-files",
+    "nodejs",
+    "web-server",
+    "dav",
+    "file-system",
+    "cloud-storage"
   ],
-  "author": "",
-  "license": "ISC",
-  "description": "WebDAV server with file operations"
+  "author": "DeveloperKubilay",
+  "license": "MIT",
+  "description": "WebDAV server with file operations",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DeveloperKubilay/WebDav-serve"
+  },
+  "homepage": "https://github.com/DeveloperKubilay/WebDav-serve#readme",
+  "bugs": {
+    "url": "https://github.com/DeveloperKubilay/WebDav-serve/issues"
+  }
 }
