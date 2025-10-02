@@ -8,8 +8,12 @@ server.listen(8080, () => {
 });
 
 webdav(server, {
-    list: function (pathname) {
+    get: function (pathname) {
         //console.log(pathname)
+        if (pathname === "/test-smoke.txt") 
+            return [
+                { name: 'test-smoke.txt', type: 'file', size: 10, lastmod: new Date() }
+            ]
         return [
             { name: '/', type: 'directory', size: 0, lastmod: new Date() },
             { name: '/test-smoke.txt', type: 'file', size: 10, lastmod: new Date() },

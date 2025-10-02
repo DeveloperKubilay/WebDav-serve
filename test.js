@@ -5,7 +5,7 @@ const propfindRequest = async () => {
     try {
         const response = await axios({
             method: 'PROPFIND',
-            url: 'http://localhost:8081',
+            url: 'http://localhost:8080/test-smoke.txt',
             headers: {
   connection: 'Keep-Alive',
   'user-agent': 'Microsoft-WebDAV-MiniRedir/10.0.26100',
