@@ -19,7 +19,7 @@ module.exports = function (server, options) {
         res.setHeader('MS-Author-Via', 'DAV');
 
         if (true) {
-             console.log(req.method, path, req.headers,path);
+            console.log(req.method, path, req.headers);
         }
 
 
@@ -41,9 +41,10 @@ module.exports = function (server, options) {
             });
             res.end();
         } else if (req.method === 'PROPFIND') {
-            const list = req.headers.depth === "0" ? [
+
+            const list = path === "/" && req.headers.depth === "0" ? [
                 { name: "/", type: 'directory', size: 0, lastmod: new Date() }
-            ] : options.get(path)
+            ] : options.list(path)
                 .map(item => {
                     if (!item.name.startsWith('/')) {
                         item.name = '/' + item.name;
@@ -54,8 +55,14 @@ module.exports = function (server, options) {
                     return item;
                 })
 
+            if(list.length === 0) {
+                res.writeHead(404);
+                res.end();
+                return;
+            }
+
             sendXMLResponse(
-        `<?xml version="1.0" encoding="utf-8"?>
+                `<?xml version="1.0" encoding="utf-8"?>
         <D:multistatus xmlns:D="DAV:">
             ${list.map(item => `
             <D:response>
@@ -78,6 +85,22 @@ module.exports = function (server, options) {
          </D:multistatus>`);
 
 
+        } else if(req.method === 'GET') {
+            const file = options.get(path);
+            if(!file || (Array.isArray(file) && file.length === 0)) {
+                res.writeHead(404);
+                res.end();
+                return;
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/octet-stream',
+            });
+            if(file.pipe) {
+                file.pipe(res);
+            } else {
+                res.end(file);
+            }
+            
         }
 
 
