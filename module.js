@@ -5,6 +5,16 @@ const url = require('url');
 const xml2js = require('xml2js');
 const crypto = require('crypto');
 
+const sessions = {};
+
+setInterval(() => {
+    for (let key in sessions) {
+        const session = sessions[key];
+        if (session.created + (2 * 60 * 60 * 1000) < Date.now()) delete sessions[key];
+    }
+}, 60 * 60 * 1000);
+
+
 module.exports = function (server, options) {
 
     server.on('request', (req, res) => {
@@ -23,13 +33,31 @@ module.exports = function (server, options) {
         }
 
 
-        function sendXMLResponse(xml, status = 207) {
+        function sendXMLResponse(xml, status = 207, extraHeaders = {}) {
             const xmlBuffer = Buffer.from(xml, 'utf-8');
             res.writeHead(status, {
                 'Content-Type': 'text/xml; charset=utf-8',
-                'Content-Length': String(xmlBuffer.length)
+                'Content-Length': String(xmlBuffer.length),
+                ...extraHeaders
             });
             res.end(xmlBuffer);
+        }
+
+        function closeConnection() {
+            res.writeHead(404);
+            res.end();
+        }
+
+        function listDirectory(pathname) {
+            return pathname === "/" && req.headers.depth === "0" ? [
+                { name: "/", type: 'directory', size: 0, lastmod: new Date() }
+            ] : options.list(pathname)
+                .map(item => {
+                    if (item.type === 'directory' && !item.name.endsWith('/')) {
+                        item.name = item.name + '/';
+                    }
+                    return item;
+                })
         }
 
         if (req.method === 'OPTIONS') {
@@ -41,25 +69,8 @@ module.exports = function (server, options) {
             });
             res.end();
         } else if (req.method === 'PROPFIND') {
-
-            const list = path === "/" && req.headers.depth === "0" ? [
-                { name: "/", type: 'directory', size: 0, lastmod: new Date() }
-            ] : options.list(path)
-                .map(item => {
-                    if (!item.name.startsWith('/')) {
-                        item.name = '/' + item.name;
-                    }
-                    if (item.type === 'directory' && !item.name.endsWith('/')) {
-                        item.name = item.name + '/';
-                    }
-                    return item;
-                })
-
-            if(list.length === 0) {
-                res.writeHead(404);
-                res.end();
-                return;
-            }
+            const list = listDirectory(path);
+            if (list.length === 0) return closeConnection();
 
             sendXMLResponse(
                 `<?xml version="1.0" encoding="utf-8"?>
@@ -85,22 +96,83 @@ module.exports = function (server, options) {
          </D:multistatus>`);
 
 
-        } else if(req.method === 'GET') {
+        } else if (req.method === 'GET') {
             const file = options.get(path);
-            if(!file || (Array.isArray(file) && file.length === 0)) {
-                res.writeHead(404);
-                res.end();
-                return;
-            }
+            if (!file || (Array.isArray(file) && file.length === 0)) return closeConnection();
             res.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
             });
-            if(file.pipe) {
-                file.pipe(res);
-            } else {
-                res.end(file);
+
+            file.pipe ? file.pipe(res) : res.end(file);
+        }
+        else if (req.method === 'LOCK' || req.method === 'UNLOCK') {
+            if (req.method === 'LOCK') {
+                const lockToken = crypto.randomBytes(16).toString('hex');
+                sessions[lockToken] = { path, created: Date.now(), };
+                options.lock && options.lock(path, lockToken, req);
+
+                return sendXMLResponse(`<?xml version="1.0" encoding="utf-8"?>
+                <D:prop xmlns:D="DAV:">
+                  <D:lockdiscovery>
+                    <D:activelock>
+                      <D:locktype><D:write/></D:locktype>
+                      <D:lockscope><D:exclusive/></D:lockscope>
+                      <D:depth>0</D:depth>
+                      <D:timeout>${req.headers.timeout || 'Infinite'}</D:timeout>
+                      <D:locktoken><D:href>${lockToken}</D:href></D:locktoken>
+                      <D:lockroot><D:href>${path}</D:href></D:lockroot>
+                    </D:activelock>
+                  </D:lockdiscovery>
+                </D:prop>`, 200, {
+                    'Lock-Token': `<${lockToken}>`
+                });
             }
-            
+
+            const lockHeader = req.headers['lock-token'];
+            if (lockHeader) {
+                const token = lockHeader.replace(/[<>]/g, '').trim();
+                delete sessions[token];
+            }
+            options.unlock && options.unlock(path, req);
+
+            res.writeHead(204, {
+                'Content-Length': '0'
+            });
+            res.end();
+        } else if (req.method === 'HEAD') {
+            const list = listDirectory(path);
+            if (list.length === 0) return closeConnection();
+            const item = list[0];
+            if (item.type !== 'file') {
+                res.writeHead(200, {
+                    'Content-Type': 'text/html',
+                    'Content-Length': '0'
+                });
+                return res.end();
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': String(item.size),
+                'Last-Modified': item.lastmod.toUTCString()
+            });
+            return res.end();
+        } else if (req.method === 'PUT') {
+            const exist = listDirectory(path);
+
+            if (req.headers.if.replace(/[<>]/g, '').trim() in sessions) {
+                options.write && options.write(path, req);
+                req.on('end', () => {
+                    res.writeHead(exist.length === 0 ? 201 : 204, {
+                        'Content-Type': 'application/octet-stream',
+                        'Content-Length': '0'
+                    });
+
+                    delete sessions[req.headers.if.replace(/[<>]/g, '').trim()];
+                    res.end();
+                });
+            }
+            return res.end();
+            // options.write(path);
         }
 
 
