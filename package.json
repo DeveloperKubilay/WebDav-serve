@@ -20,7 +20,7 @@
   ],
   "author": "DeveloperKubilay",
   "license": "MIT",
-  "description": "WebDAV server with file operations",
+  "description": "Transform your local disk into a network drive with Node.js 🚀📁🌐",
   "repository": {
     "type": "git",
     "url": "https://github.com/DeveloperKubilay/WebDav-serve"
