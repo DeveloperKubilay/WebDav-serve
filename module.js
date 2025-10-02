@@ -1,8 +1,4 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const url = require('url');
-const xml2js = require('xml2js');
 const crypto = require('crypto');
 
 const sessions = {};
@@ -17,7 +13,7 @@ setInterval(() => {
 
 module.exports = function (server, options) {
 
-    server.on('request', (req, res) => {
+    server.on('request', async (req, res) => {
 
         const path = decodeURIComponent(url.parse(req.url, true).pathname)
             .replace(/[<>:"|?*]/g, '_').replace(/\.\./g, '');
@@ -34,7 +30,8 @@ module.exports = function (server, options) {
 
 
         function sendXMLResponse(xml, status = 207, extraHeaders = {}) {
-            const xmlBuffer = Buffer.from(xml, 'utf-8');
+            const cleanXml = xml.replace(/>\s+</g, '><').replace(/\n\s*/g, '').trim();
+            const xmlBuffer = Buffer.from(cleanXml, 'utf-8');
             res.writeHead(status, {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'Content-Length': String(xmlBuffer.length),
@@ -48,10 +45,10 @@ module.exports = function (server, options) {
             res.end();
         }
 
-        function listDirectory(pathname) {
+        async function listDirectory(pathname) {
             return pathname === "/" && req.headers.depth === "0" ? [
                 { name: "/", type: 'directory', size: 0, lastmod: new Date() }
-            ] : options.list(pathname)
+            ] : (await options.list(pathname))
                 .map(item => {
                     if (item.type === 'directory' && !item.name.endsWith('/')) {
                         item.name = item.name + '/';
@@ -69,7 +66,7 @@ module.exports = function (server, options) {
             });
             res.end();
         } else if (req.method === 'PROPFIND') {
-            const list = listDirectory(path);
+            const list = await listDirectory(path);
             if (list.length === 0) return closeConnection();
 
             sendXMLResponse(
@@ -140,7 +137,7 @@ module.exports = function (server, options) {
             });
             res.end();
         } else if (req.method === 'HEAD') {
-            const list = listDirectory(path);
+            const list = await listDirectory(path);
             if (list.length === 0) return closeConnection();
             const item = list[0];
             if (item.type !== 'file') {
@@ -157,23 +154,65 @@ module.exports = function (server, options) {
             });
             return res.end();
         } else if (req.method === 'PUT') {
-            const exist = listDirectory(path);
+            const list = await listDirectory(path);
 
-            if (req.headers.if.replace(/[<>]/g, '').trim() in sessions) {
-                options.write && options.write(path, req);
-                req.on('end', () => {
-                    res.writeHead(exist.length === 0 ? 201 : 204, {
-                        'Content-Type': 'application/octet-stream',
-                        'Content-Length': '0'
-                    });
-
-                    delete sessions[req.headers.if.replace(/[<>]/g, '').trim()];
-                    res.end();
-                });
+            let token = null;
+            if (req.headers.if) {
+                const m = req.headers.if.match(/<([^>]+)>/);
+                if (m) token = m[1];
             }
-            return res.end();
-            // options.write(path);
+
+            if (token && !(token in sessions)) {
+                res.writeHead(423);
+                return res.end();
+            }
+
+            await options.write(path, req);
+
+            if (token) delete sessions[token];
+            res.writeHead(list.length === 0 ? 201 : 204, {
+                'Content-Length': '0'
+            });
+            res.end();
+
+        } else if (req.method === 'PROPPATCH') {
+            let body = '';
+            req.on('data', chunk => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                options.proppatch && options.proppatch(path, body);
+                sendXMLResponse(`<?xml version="1.0" encoding="utf-8"?>
+                <D:multistatus xmlns:D="DAV:">
+                  <D:response>
+                    <D:href>${path}</D:href>
+                    <D:propstat>
+                      <D:prop/>
+                      <D:status>HTTP/1.1 200 OK</D:status>
+                    </D:propstat>
+                  </D:response>
+                </D:multistatus>`, 200);
+            })
+        } else if (req.method === 'MKCOL') {
+            options.mkdir && await options.mkdir(path, req);
+            res.writeHead(201);
+            res.end();
+            res.end();
+        } else if (req.method === 'DELETE') {
+            options.delete && await options.delete(path, req);
+            res.writeHead(204);
+            res.end();
+        } else if (req.method === 'MOVE') {
+            const list = await listDirectory(path);
+
+            const destinationUrl = new URL(req.headers['destination']);
+            const destinationPath = decodeURIComponent(destinationUrl.pathname).replace(/[<>:"|?*]/g, '_').replace(/\.\./g, '');
+
+            options.move && await options.move(path, destinationPath);
+            res.writeHead(list.length === 0 ? 201 : 204, { 'Content-Length': '0' });
+            res.end();
         }
+
 
 
 
