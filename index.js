@@ -23,11 +23,12 @@ module.exports = function (server, options) {
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Depth, Destination, Overwrite, Lock-Token, Timeout, If');
         res.setHeader('DAV', '1,2');
         res.setHeader('MS-Author-Via', 'DAV');
-
-       /* if (true) {
+        /*
+        if (true) {
             console.log(req.method, path, req.headers);
-        }
-       */
+           // require('fs').appendFileSync('access.log', `[${new Date().toISOString()}] ${req.method} ${path} ${JSON.stringify(req.headers)}\n`);
+        }*/
+       
 
         function sendXMLResponse(xml, status = 207, extraHeaders = {}) {
             const cleanXml = xml.replace(/>\s+</g, '><').replace(/\n\s*/g, '').trim();
@@ -74,9 +75,10 @@ module.exports = function (server, options) {
         <D:multistatus xmlns:D="DAV:">
             ${list.map(item => `
             <D:response>
-                <D:href>${encodeURI(item.name)}</D:href>
+                <D:href>${encodeURI(item.name).replace(/%20/g, ' ')}</D:href>
                 <D:propstat>
                     <D:prop>
+                        <D:displayname>${item.name.split('/').filter(Boolean).pop() || '/'}</D:displayname>
                         <D:resourcetype>${item.type === 'directory' ? '<D:collection/>' : ''}</D:resourcetype>
                         <D:getlastmodified>${typeof item.lastmod == "string" ? item.lastmod : item.lastmod.toUTCString()}</D:getlastmodified>
                         ${item.type === 'file' ? `<D:getcontentlength>${item.size}</D:getcontentlength>` : ''}
@@ -102,7 +104,7 @@ module.exports = function (server, options) {
 
             const rangeHeader = req.headers.range;
             let start = 0;
-            let end = item.size - 1;
+            let end;
             let isPartial = false;
 
             if (rangeHeader) {
@@ -121,7 +123,7 @@ module.exports = function (server, options) {
                 }
             }
 
-            const contentLength = end - start + 1;
+            const contentLength = isPartial ? (end - start + 1) : item.size;
             const headers = {
                 'Content-Type': 'application/octet-stream',
                 'Content-Length': String(contentLength),
@@ -135,7 +137,7 @@ module.exports = function (server, options) {
                 res.writeHead(200, headers);
             }
 
-            const file = options.get(path, { start, end });
+            const file = options.get(path, isPartial ? { start, end } : {});
             file.pipe ? file.pipe(res) : res.end(file);
         }
         else if (req.method === 'LOCK' || req.method === 'UNLOCK') {
@@ -234,7 +236,6 @@ module.exports = function (server, options) {
             options.mkdir && await options.mkdir(path, req);
             res.writeHead(201);
             res.end();
-            res.end();
         } else if (req.method === 'DELETE') {
             options.delete && await options.delete(path, req);
             res.writeHead(204);
@@ -244,9 +245,36 @@ module.exports = function (server, options) {
 
             const destinationUrl = new URL(req.headers['destination']);
             const destinationPath = decodeURIComponent(destinationUrl.pathname).replace(/[<>:"|?*]/g, '_').replace(/\.\./g, '');
+            const overwriteHeader = req.headers['overwrite'];
+            const allowOverwrite = !overwriteHeader || overwriteHeader.toUpperCase() !== 'F';
 
-            options.move && await options.move(path, destinationPath);
+            try {
+                options.move && await options.move(path, destinationPath, allowOverwrite);
+            } catch (err) {
+                if (err && err.statusCode) {
+                    res.writeHead(err.statusCode, { 'Content-Length': '0' });
+                    return res.end();
+                }
+                throw err;
+            }
             res.writeHead(list.length === 0 ? 201 : 204, { 'Content-Length': '0' });
+            res.end();
+        } else if (req.method === 'POST') {
+            let list = [];
+            try {
+                list = await listDirectory(path);
+            } catch (err) {
+                list = [];
+            }
+
+            const targetName = path.endsWith('/') ? path.slice(0, -1) || '/' : path;
+            const existed = list.some(item => {
+                const itemName = item.name.endsWith('/') ? item.name.slice(0, -1) : item.name;
+                return itemName === targetName;
+            });
+
+            await options.write(path, req);
+            res.writeHead(existed ? 204 : 201, { 'Content-Length': '0' });
             res.end();
         }
 
