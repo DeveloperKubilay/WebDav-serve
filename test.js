@@ -41,8 +41,13 @@ webdav(server, {
         const diskPath = resolveDiskPath(pathname);
         if (!fs.existsSync(diskPath)) return [];
         
-        const { start = 0, end } = options;
-        const stream = fs.createReadStream(diskPath, { start, end });
+        const { start, end } = options;
+        const streamOptions = {};
+        
+        if (start !== undefined) streamOptions.start = start;
+        if (end !== undefined) streamOptions.end = end;
+        
+        const stream = fs.createReadStream(diskPath, streamOptions);
         
         stream.on('error', (err) => {
             console.error('Error reading file:', err);
@@ -71,12 +76,30 @@ webdav(server, {
             });
         })
     },
-    move: function (pathname, destinationPath) {
+    move: function (pathname, destinationPath, allowOverwrite) {
         const sourceDiskPath = resolveDiskPath(pathname);
         const destDiskPath = resolveDiskPath(destinationPath);
 
         if (!fs.existsSync(sourceDiskPath)) return;
-        fs.renameSync(sourceDiskPath, destDiskPath);
+
+        const destDir = path.dirname(destDiskPath);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+        if (fs.existsSync(destDiskPath)) {
+            if (!allowOverwrite) return;
+            const destStat = fs.statSync(destDiskPath);
+            if (destStat.isDirectory()) {
+                fs.rmSync(destDiskPath, { recursive: true, force: true });
+            } else {
+                fs.unlinkSync(destDiskPath);
+            }
+        }
+
+        try {
+            fs.renameSync(sourceDiskPath, destDiskPath);
+        } catch (err) {
+            return;
+        }
     },
     delete: function (pathname) {
         const diskPath = resolveDiskPath(pathname);
