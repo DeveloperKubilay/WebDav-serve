@@ -27,7 +27,8 @@ module.exports = function (server, options) {
         if (true) {
             console.log(req.method, path, req.headers);
            // require('fs').appendFileSync('access.log', `[${new Date().toISOString()}] ${req.method} ${path} ${JSON.stringify(req.headers)}\n`);
-        }*/
+        }
+           */
        
 
         function sendXMLResponse(xml, status = 207, extraHeaders = {}) {
@@ -138,7 +139,8 @@ module.exports = function (server, options) {
             }
 
             const file = options.get(path, isPartial ? { start, end } : {});
-            file.pipe ? file.pipe(res) : res.end(file);
+            if (!file) return closeConnection();
+            file?.pipe ? file.pipe(res) : res.end(file);
         }
         else if (req.method === 'LOCK' || req.method === 'UNLOCK') {
             if (req.method === 'LOCK') {
