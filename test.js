@@ -31,6 +31,7 @@ webdav(server, {
             return [{ name: originalPath, size: fs.statSync(diskPath).size, type: 'file', lastmod: fs.statSync(diskPath).mtime }];
         } else {
             const files = fs.readdirSync(diskPath);
+            files.push(".");
             return files
                 .filter(f => fs.existsSync(path.join(diskPath, f)))
                 .map(f => {
@@ -43,15 +44,15 @@ webdav(server, {
     get: function (pathname, options = {}) {
         const diskPath = resolveDiskPath(pathname);
         if (!fs.existsSync(diskPath)) return null;
-        
+
         const { start, end } = options;
         const streamOptions = {};
-        
+
         if (start !== undefined) streamOptions.start = start;
         if (end !== undefined) streamOptions.end = end;
-        
+
         const stream = fs.createReadStream(diskPath, streamOptions);
-        
+
         stream.on('error', (err) => {
             console.error('Error reading file:', err);
         });
