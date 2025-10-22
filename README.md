@@ -14,17 +14,22 @@ A simple, customizable WebDAV server for sharing your local disk as a network dr
 ## Quick Start 🏃‍♂️
 
 ```javascript
-const webdav = require('webdav-serve');
+const webdav = require('webdav');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const server = http.createServer();
 
 function resolveDiskPath(rel) {
-    if (!rel) return __dirname;
+    const root = path.join(__dirname, 'files');  //ROOT_DIR
+    if (!rel) return root;
     rel = rel.replace(/^\\+/g, '/');
     rel = rel.replace(/^\/+/, '');
-    return path.join(__dirname, rel);
+    return path.join(root, rel);
+}
+
+if (!fs.existsSync(resolveDiskPath('/'))) {
+    fs.mkdirSync(resolveDiskPath('/'));
 }
 
 server.listen(8080, () => {
@@ -42,7 +47,6 @@ webdav(server, {
             return [{ name: originalPath, size: fs.statSync(diskPath).size, type: 'file', lastmod: fs.statSync(diskPath).mtime }];
         } else {
             const files = fs.readdirSync(diskPath);
-            files.push(".");
             return files
                 .filter(f => fs.existsSync(path.join(diskPath, f)))
                 .map(f => {
@@ -54,7 +58,7 @@ webdav(server, {
     },
     get: function (pathname, options = {}) {
         const diskPath = resolveDiskPath(pathname);
-        if (!fs.existsSync(diskPath)) return [];
+        if (!fs.existsSync(diskPath)) return null;
         
         const { start, end } = options;
         const streamOptions = {};
