@@ -14,7 +14,7 @@ A simple, customizable WebDAV server for sharing your local disk as a network dr
 ## Quick Start 🏃‍♂️
 
 ```javascript
-const webdav = require('webdav');
+const webdav = require('webdav-serve');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
