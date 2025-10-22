@@ -29,7 +29,7 @@ module.exports = function (server, options) {
            // require('fs').appendFileSync('access.log', `[${new Date().toISOString()}] ${req.method} ${path} ${JSON.stringify(req.headers)}\n`);
         }
            */
-       
+
 
         function sendXMLResponse(xml, status = 207, extraHeaders = {}) {
             const cleanXml = xml.replace(/>\s+</g, '><').replace(/\n\s*/g, '').trim();
@@ -73,7 +73,7 @@ module.exports = function (server, options) {
 
             sendXMLResponse(
                 `<?xml version="1.0" encoding="utf-8"?>
-        <D:multistatus xmlns:D="DAV:">
+        <D:multistatus xmlns:D="DAV:" xmlns:Win="urn:schemas-microsoft-com:">
             ${list.map(item => `
             <D:response>
                 <D:href>${encodeURI(item.name).replace(/%20/g, ' ')}</D:href>
@@ -89,6 +89,10 @@ module.exports = function (server, options) {
                                 ${item.writeable == false ? `<D:locktype><D:read/></D:locktype>` : '<D:locktype><D:write/></D:locktype>'}
                             </D:lockentry>
                         </D:supportedlock>
+                        ${item.type === 'directory' ?`
+                        <d:quota-available-bytes>100000000000000</d:quota-available-bytes>
+                        <d:quota-used-bytes>0</d:quota-used-bytes>
+                        ` : ''}
                     </D:prop>
                     <D:status>HTTP/1.1 200 OK</D:status>
                 </D:propstat>
@@ -100,7 +104,7 @@ module.exports = function (server, options) {
             const list = await listDirectory(path);
             if (list.length === 0) return closeConnection();
             const item = list[0];
-            
+
             if (item.type !== 'file') return closeConnection();
 
             const rangeHeader = req.headers.range;
@@ -114,7 +118,7 @@ module.exports = function (server, options) {
                     isPartial = true;
                     start = match[1] ? parseInt(match[1]) : 0;
                     end = match[2] ? parseInt(match[2]) : item.size - 1;
-                    
+
                     if (start >= item.size || end >= item.size || start > end) {
                         res.writeHead(416, {
                             'Content-Range': `bytes */${item.size}`
