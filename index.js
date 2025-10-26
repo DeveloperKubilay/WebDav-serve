@@ -14,9 +14,15 @@ setInterval(() => {
 module.exports = function (server, options) {
 
     server.on('request', async (req, res) => {
-
-        const path = decodeURIComponent(url.parse(req.url, true).pathname)
-            .replace(/[<>:"|?*]/g, '_').replace(/\.\./g, '');
+        // Path'i normalize et, baştaki/sondaki slash'ları düzelt, özel karakterleri temizle
+        let rawPath = decodeURIComponent(url.parse(req.url, true).pathname);
+        rawPath = rawPath.replace(/\\+/g, '/'); // Windows'tan gelen ters slashları düzelt
+        rawPath = rawPath.replace(/\/+/g, '/'); // Fazla slashları tek slasha indir
+        rawPath = rawPath.replace(/[<>:"|?*]/g, '_'); // Özel karakterleri temizle
+        rawPath = rawPath.replace(/\.\./g, ''); // Parent directory hack'ini engelle
+        rawPath = rawPath.replace(/\/+/g, '/'); // Tekrar fazlalıkları temizle
+        if (!rawPath.startsWith('/')) rawPath = '/' + rawPath;
+        const path = rawPath;
 
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET, HEAD, POST, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK');
@@ -48,13 +54,18 @@ module.exports = function (server, options) {
         }
 
         async function listDirectory(pathname) {
-            return pathname === "/" && req.headers.depth === "0" ? [
+            // Path'i normalize et
+            let normPath = pathname.replace(/\\+/g, '/').replace(/\/+/g, '/');
+            if (!normPath.startsWith('/')) normPath = '/' + normPath;
+            return normPath === "/" && req.headers.depth === "0" ? [
                 { name: "/", type: 'directory', size: 0, lastmod: new Date() }
-            ] : (await options.list(pathname))
+            ] : (await options.list(normPath))
                 .map(item => {
                     if (item.type === 'directory' && !item.name.endsWith('/')) {
                         item.name = item.name + '/';
                     }
+                    // Klasör/dosya ismini normalize et
+                    item.name = item.name.replace(/\\+/g, '/').replace(/\/+/g, '/');
                     return item;
                 })
         }
@@ -89,10 +100,8 @@ module.exports = function (server, options) {
                                 ${item.writeable == false ? `<D:locktype><D:read/></D:locktype>` : '<D:locktype><D:write/></D:locktype>'}
                             </D:lockentry>
                         </D:supportedlock>
-                        ${item.type === 'directory' ?`
-                        <d:quota-available-bytes>100000000000000</d:quota-available-bytes>
-                        <d:quota-used-bytes>0</d:quota-used-bytes>
-                        ` : ''}
+                        <D:quota-available-bytes>100000000000000</D:quota-available-bytes>
+                        <D:quota-used-bytes>0</D:quota-used-bytes>
                     </D:prop>
                     <D:status>HTTP/1.1 200 OK</D:status>
                 </D:propstat>
